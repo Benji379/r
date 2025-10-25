@@ -9,13 +9,19 @@ interface Props {
 
 const CAMPOS_DISPONIBLES = [
   "dni",
-  "nombres",
   "ap_pat",
   "ap_mat",
+  "nombres",
   "fecha_nac",
+  "fch_inscripcion",
+  "fch_emision",
+  "fch_caducidad",
+  "ubigeo_nac",
+  "ubigeo_dir",
   "direccion",
   "sexo",
   "est_civil",
+  "dig_ruc",
   "madre",
   "padre",
 ];

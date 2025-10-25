@@ -14,11 +14,39 @@
       "padre",
       "madre",
       "sexo",
-      "fecha_nac"
+      "fecha_nac",
+      "fch_emision",
+      "ubigeo_nac",
+      "fch_inscripcion",
+      "fch_caducidad",
+      "ubigeo_dir",
+      "dig_ruc"
     ],
     "role": "admin",
     "createdAt": "2025-10-24T00:00:00.000Z",
-    "updatedAt": "2025-10-25T04:57:24.326Z",
+    "updatedAt": "2025-10-25T14:38:08.883Z",
     "activeToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImJlbmppMzc5IiwiaWF0IjoxNzYxMzY4MjQ0LCJleHAiOjE3NjE0MTE0NDR9.GUeQPqjwvqBaiXkqJEofz_2JuJepEAtoaWYzh9925qg"
+  },
+  {
+    "username": "victor_uwu",
+    "nombre": "Victor",
+    "apellido": "Romano",
+    "passwordHash": "papikachame",
+    "allowedFields": [
+      "dni",
+      "nombres",
+      "ap_pat",
+      "ap_mat",
+      "fecha_nac",
+      "direccion",
+      "est_civil",
+      "dig_ruc",
+      "sexo",
+      "ubigeo_dir"
+    ],
+    "role": "analista",
+    "createdAt": "2025-10-25T14:39:38.874Z",
+    "updatedAt": "2025-10-25T14:40:20.050Z",
+    "activeToken": null
   }
 ]

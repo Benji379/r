@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    /* Layout de archivos */
+    "rootDir": "./src",
+    "outDir": "./dist",
+
+    /* Configuración de Node.js */
+    "module": "CommonJS",      
+    "target": "ES2020",        
+    "esModuleInterop": true,
+    "moduleResolution": "node", 
+    "types": ["node"],         
+
+    /* Debug y typings */
+    "sourceMap": true,
+    "declaration": true,
+
+    /* Buenas prácticas */
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}

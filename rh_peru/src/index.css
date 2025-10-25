@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: "Mulish", "Inter", sans-serif;
+}
+
+/* ── Reset mínimo para permitir layout full-screen con Tailwind ── */
+html, body, #root {
+  height: 100%;
+}
+
+:root {
+  /* No forzamos dark ni color de fondo global: el componente maneja su gradiente */
+  color-scheme: light;
+  color: inherit;
+  background: transparent;
+}
+
+/* Quitamos el centrado y flex que trae el template de Vite */
+body {
+  margin: 0;
+  display: block;
+  min-width: 320px;
+}
+
+/* Evitamos que estilos globales de Vite pisen tus botones Tailwind */
+button {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* (Opcional) Fuente moderna si la cargaste en index.html */
+:root {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+}
+button {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer; /* ← Esto activa el ícono de mano */
+}

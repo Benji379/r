@@ -1,0 +1,5 @@
+/* Intencionalmente vacío para no sobreescribir Tailwind.
+   Si necesitas estilos de página, agrégalos como clases locales
+   en tus componentes (o usa @apply de Tailwind). */
+
+/* Eliminamos las reglas de demo (#root, .logo, .card, etc.) */

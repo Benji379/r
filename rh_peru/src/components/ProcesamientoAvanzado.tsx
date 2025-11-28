@@ -8,7 +8,7 @@
 // npm install xlsx file-saver
 // npm install @types/file-saver -D
 //
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 
 // --- Dependencias Externas ---
 // Las siguientes 2 líneas pueden mostrar un error en la vista previa
@@ -23,10 +23,30 @@ import { saveAs } from "file-saver";
 // Esta es la misma ruta que usan tus otros componentes.
 import { apiClient } from "../api/apiClient";
 
+// Campos disponibles de la API (mismos que en EditarUsuarioModal)
+const CAMPOS_DISPONIBLES = [
+  "dni",
+  "ap_pat",
+  "ap_mat",
+  "nombres",
+  "fecha_nac",
+  "fch_inscripcion",
+  "fch_emision",
+  "fch_caducidad",
+  "ubigeo_nac",
+  "ubigeo_dir",
+  "direccion",
+  "sexo",
+  "est_civil",
+  "dig_ruc",
+  "madre",
+  "padre",
+];
+
 // Tipo para representar cada fila de datos
 type DataRow = {
   [key: string]: any;
-  // Nuevas columnas que añadiremos
+  // Nuevas columnas que añadiremos dinámicamente según campos seleccionados
   nombreVerificado?: string;
   fechaVerificada?: string;
   // Estado de procesamiento por fila
@@ -52,6 +72,12 @@ export default function ProcesamientoAvanzado() {
   const [processingMode, setProcessingMode] = useState<'all' | 'range'>('all');
   const [rangeStart, setRangeStart] = useState<number>(1);
   const [rangeEnd, setRangeEnd] = useState<number>(1);
+
+  // Estado para campos seleccionados (por defecto nombreVerificado y fechaVerificada)
+  const [selectedFields, setSelectedFields] = useState<string[]>(["nombreVerificado", "fechaVerificada"]);
+  
+  // Ref para evitar doble procesamiento
+  const isProcessingRef = useRef<boolean>(false);
 
 
   // --- 1. Carga del Archivo ---
@@ -104,7 +130,7 @@ export default function ProcesamientoAvanzado() {
         setError(`No se encontró la hoja "${sheetName}" en el archivo.`);
         return;
       }
-      const jsonData = XLSX.utils.sheet_to_json<DataRow>(worksheet, { header: 1 });
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
 
       if (jsonData.length < 2) {
         setError("La hoja seleccionada está vacía o no tiene cabeceras.");
@@ -113,7 +139,7 @@ export default function ProcesamientoAvanzado() {
       }
 
       // Tomar la primera fila como cabeceras
-      const rawHeaders = (jsonData[0] as string[]).map(String); // Asegurar que sean strings
+      const rawHeaders = (jsonData[0] as any[]).map(String); // Asegurar que sean strings
       setHeaders(rawHeaders);
       
       // Convertir el resto de filas en objetos
@@ -124,8 +150,11 @@ export default function ProcesamientoAvanzado() {
         });
         // Añadir estado inicial
         rowData._processing = false;
-        rowData.nombreVerificado = "";
-        rowData.fechaVerificada = "";
+        // Inicializar todos los campos posibles (nombreVerificado, fechaVerificada y todos los de CAMPOS_DISPONIBLES)
+        // Esto evita problemas de sincronización con selectedFields
+        ["nombreVerificado", "fechaVerificada", ...CAMPOS_DISPONIBLES].forEach(field => {
+          rowData[field] = "";
+        });
         return rowData;
       });
 
@@ -196,6 +225,11 @@ export default function ProcesamientoAvanzado() {
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   const handleStartProcessing = async () => {
+    // Prevenir doble procesamiento
+    if (isProcessingRef.current || isProcessing) {
+      return;
+    }
+
     if (!dniColumn) {
       setError("Por favor, seleccione la columna que contiene el DNI.");
       return;
@@ -206,60 +240,84 @@ export default function ProcesamientoAvanzado() {
       return;
     }
 
+    if (selectedFields.length === 0) {
+      setError("Por favor, seleccione al menos un campo para procesar.");
+      return;
+    }
+
+    // Marcar como procesando
+    isProcessingRef.current = true;
     setIsProcessing(true);
     setProcessedCount(0);
     setProgress(0);
     setError("");
 
-    // Usamos un bucle for...of para procesar secuencialmente con delays
-    // Iteramos solo sobre el rango seleccionado (calculado en useMemo)
-    for (let i = startIndex; i < endIndex; i++) {
-      const row = data[i]; // Accedemos directamente al índice correcto
-      const dni = row[dniColumn];
+    try {
+      // Usamos un bucle for...of para procesar secuencialmente con delays
+      // Iteramos solo sobre el rango seleccionado (calculado en useMemo)
+      for (let i = startIndex; i < endIndex; i++) {
+        // Verificar nuevamente si se canceló el procesamiento
+        if (!isProcessingRef.current) {
+          break;
+        }
 
-      // Actualizar estado de la fila a "procesando"
-      updateRowState(i, { _processing: true, _error: "" });
+        const row = data[i]; // Accedemos directamente al índice correcto
+        const dni = row[dniColumn];
 
-      if (!dni || String(dni).trim() === "") {
-        updateRowState(i, { _processing: false, _error: "DNI vacío" });
-      } else {
-        try {
-          // Llamada a la API
-          const res = await apiClient.get(`/consulta?dni=${String(dni).trim()}`);
-          
-          const apiData = Array.isArray(res.data.data) ? res.data.data[0] : res.data.data;
+        // Actualizar estado de la fila a "procesando"
+        updateRowState(i, { _processing: true, _error: "" });
 
-          if (apiData && (apiData.nombres || apiData.ap_pat)) {
-            const nombreCompleto = `${apiData.nombres || ''} ${apiData.ap_pat || ''} ${apiData.ap_mat || ''}`.trim();
-            const fechaNac = apiData.fecha_nac || '';
+        if (!dni || String(dni).trim() === "") {
+          updateRowState(i, { _processing: false, _error: "DNI vacío" });
+        } else {
+          try {
+            // Llamada a la API
+            const res = await apiClient.get(`/consulta?dni=${String(dni).trim()}`);
             
-            updateRowState(i, {
-              _processing: false,
-              nombreVerificado: nombreCompleto,
-              fechaVerificada: fechaNac,
-            });
-          } else {
-            updateRowState(i, { _processing: false, _error: "No encontrado" });
+            const apiData = Array.isArray(res.data.data) ? res.data.data[0] : res.data.data;
+
+            if (apiData) {
+              // Construir objeto con solo los campos seleccionados
+              const rowUpdate: Partial<DataRow> = { _processing: false };
+              
+              // Procesar cada campo seleccionado
+              selectedFields.forEach(field => {
+                if (field === "nombreVerificado") {
+                  const nombreCompleto = `${apiData.nombres || ''} ${apiData.ap_pat || ''} ${apiData.ap_mat || ''}`.trim();
+                  rowUpdate.nombreVerificado = nombreCompleto;
+                } else if (field === "fechaVerificada") {
+                  rowUpdate.fechaVerificada = apiData.fecha_nac || '';
+                } else {
+                  // Para otros campos, usar el nombre del campo directamente
+                  rowUpdate[field] = apiData[field] || '';
+                }
+              });
+              
+              updateRowState(i, rowUpdate);
+            } else {
+              updateRowState(i, { _processing: false, _error: "No encontrado" });
+            }
+          } catch (err) {
+            console.error(`Error procesando DNI ${dni}:`, err);
+            updateRowState(i, { _processing: false, _error: "Error API" });
           }
-        } catch (err) {
-          console.error(`Error procesando DNI ${dni}:`, err);
-          updateRowState(i, { _processing: false, _error: "Error API" });
+        }
+
+        // Actualizar progreso
+        const newProcessedCount = (i - startIndex) + 1;
+        setProcessedCount(newProcessedCount);
+        setProgress((newProcessedCount / totalToProcess) * 100);
+
+        // Esperar 500ms antes de la siguiente iteración
+        // No esperar en la última iteración
+        if (i < endIndex - 1) {
+          await delay(500);
         }
       }
-
-      // Actualizar progreso
-      const newProcessedCount = (i - startIndex) + 1;
-      setProcessedCount(newProcessedCount);
-      setProgress((newProcessedCount / totalToProcess) * 100);
-
-      // Esperar 500ms antes de la siguiente iteración
-      // No esperar en la última iteración
-      if (i < endIndex - 1) {
-        await delay(500);
-      }
+    } finally {
+      isProcessingRef.current = false;
+      setIsProcessing(false);
     }
-
-    setIsProcessing(false);
   };
 
   // Helper para actualizar una fila específica en el estado de 'data'
@@ -278,14 +336,16 @@ export default function ProcesamientoAvanzado() {
     if (isProcessing) return;
 
     // Preparar datos para la hoja de Excel
-    // 1. Crear las cabeceras, incluyendo las nuevas
-    const newHeaders = [...headers, "nombreVerificado", "fechaVerificada", "estadoProceso"];
+    // 1. Crear las cabeceras, incluyendo solo los campos seleccionados
+    const newHeaders = [...headers, ...selectedFields, "estadoProceso"];
     
     // 2. Mapear los datos al formato de array de arrays
     const exportData = data.map(row => {
       const rowData = headers.map(header => row[header]);
-      rowData.push(row.nombreVerificado || "");
-      rowData.push(row.fechaVerificada || "");
+      // Añadir solo los campos seleccionados
+      selectedFields.forEach(field => {
+        rowData.push(row[field] || "");
+      });
       rowData.push(row._error || "OK"); // Añadir estado
       return rowData;
     });
@@ -313,6 +373,13 @@ export default function ProcesamientoAvanzado() {
     saveAs(new Blob([buf], { type: "application/octet-stream" }), `${originalFileName}_procesado.xlsx`);
   };
 
+  // Handler para toggle de campos seleccionados
+  const toggleField = (field: string) => {
+    setSelectedFields((prev) =>
+      prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field]
+    );
+  };
+
   // --- 5. Helpers y Render ---
 
   // Resetea el estado, opcionalmente manteniendo el archivo
@@ -335,10 +402,14 @@ export default function ProcesamientoAvanzado() {
     setProcessingMode('all');
     setRangeStart(1);
     setRangeEnd(1);
+    // Resetear campos seleccionados a valores por defecto
+    setSelectedFields(["nombreVerificado", "fechaVerificada"]);
+    // Resetear ref de procesamiento
+    isProcessingRef.current = false;
   };
   
-  // Memoizar las columnas nuevas para no recalcularlas en cada render
-  const newColumns = useMemo(() => ["nombreVerificado", "fechaVerificada"], []);
+  // Memoizar las columnas nuevas basadas en campos seleccionados
+  const newColumns = useMemo(() => selectedFields, [selectedFields]);
   
   const canProcess = totalToProcess > 0 && !isProcessing;
   const canDownload = data.length > 0 && !isProcessing && processedCount > 0;
@@ -485,6 +556,46 @@ export default function ProcesamientoAvanzado() {
         </div>
       )}
 
+      {/* --- NUEVA SECCIÓN: Selección de Campos --- */}
+      {data.length > 0 && (
+        <div className="bg-white/30 p-4 rounded-lg border border-white/30 space-y-3">
+          <h3 className="text-sm font-medium text-gray-800">5. Campos permitidos en API:</h3>
+          <div className="grid grid-cols-2 gap-2 text-sm text-gray-800">
+            {/* Campos especiales (nombreVerificado y fechaVerificada) */}
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selectedFields.includes("nombreVerificado")}
+                onChange={() => toggleField("nombreVerificado")}
+                className="rounded text-blue-600 focus:ring-blue-400"
+              />
+              <span className="select-none">nombreVerificado</span>
+            </label>
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selectedFields.includes("fechaVerificada")}
+                onChange={() => toggleField("fechaVerificada")}
+                className="rounded text-blue-600 focus:ring-blue-400"
+              />
+              <span className="select-none">fechaVerificada</span>
+            </label>
+            {/* Resto de campos de la API */}
+            {CAMPOS_DISPONIBLES.map((campo) => (
+              <label key={campo} className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedFields.includes(campo)}
+                  onChange={() => toggleField(campo)}
+                  className="rounded text-blue-600 focus:ring-blue-400"
+                />
+                <span className="select-none">{campo}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* --- Sección 3: Botones de Acción y Progreso --- */}
       {error && (
         <p className="text-center text-red-700 font-medium bg-red-100 p-3 rounded-lg border border-red-300">
@@ -548,6 +659,13 @@ export default function ProcesamientoAvanzado() {
                     {header}
                   </th>
                 ))}
+                {/* Columna de Estado */}
+                <th
+                  scope="col"
+                  className="py-3.5 px-3 text-left text-sm font-semibold text-gray-900 bg-yellow-200/50"
+                >
+                  estadoProceso
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-300/30">
@@ -562,15 +680,18 @@ export default function ProcesamientoAvanzado() {
                       {String(row[header] === undefined || row[header] === null ? '' : row[header])}
                     </td>
                   ))}
-                  {/* Datos Nuevos */}
-                  <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900 font-medium">
-                    {row.nombreVerificado}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900 font-medium">
+                  {/* Datos Nuevos - Solo mostrar campos seleccionados */}
+                  {newColumns.map((field) => (
+                    <td key={field} className="whitespace-nowrap px-3 py-3 text-sm text-gray-900 font-medium">
+                      {row[field] || ""}
+                    </td>
+                  ))}
+                  {/* Columna de Estado */}
+                  <td className="whitespace-nowrap px-3 py-3 text-sm font-medium">
                     {row._error ? (
                       <span className="text-red-700">{row._error}</span>
                     ) : (
-                      row.fechaVerificada
+                      <span className="text-green-700">OK</span>
                     )}
                   </td>
                 </tr>
